@@ -122,7 +122,9 @@ var WaveGeneral =
 	  playlist.setColors(config.colors);
 	  playlist.setZoomLevels(config.zoomLevels);
 	  playlist.setZoomIndex(zoomIndex);
-	  playlist.setDefault();
+	  playlist.setDefault(config.markData);
+	  playlist.setDataInfo(config.markData);
+	  playlist.setMarkInfo(config.markInfo);
 	  playlist.isAutomaticScroll = config.isAutomaticScroll;
 	  playlist.isContinuousPlay = config.isContinuousPlay;
 	  playlist.linkedEndpoints = config.linkedEndpoints;
@@ -1304,10 +1306,19 @@ var WaveGeneral =
 	
 	  }, {
 	    key: 'setDataInfo',
-	    value: function setDataInfo() {
+	    value: function setDataInfo(info) {
+	      if (info) {
+	        this.formInfo = info;
+	        return;
+	      }
 	      if (localStorage[this.name] && localStorage[this.name] !== '[]') {
 	        this.formInfo = JSON.parse(localStorage[this.name]);
 	      }
+	    }
+	  }, {
+	    key: 'setMarkInfo',
+	    value: function setMarkInfo(markInfo) {
+	      this.markInfo = markInfo;
 	    }
 	    // 设置循环
 	
@@ -1398,6 +1409,7 @@ var WaveGeneral =
 	    key: 'saveLocalStorage',
 	    value: function saveLocalStorage() {
 	      localStorage.setItem(this.name, JSON.stringify(this.formInfo));
+	      return this.formInfo;
 	    }
 	    // 工具类
 	
@@ -1413,8 +1425,9 @@ var WaveGeneral =
 	  }, {
 	    key: 'setFragHook',
 	    value: function setFragHook(frag) {
-	      this.fragHook.renderAdd(frag, this.formInfo.length - 1);
-	      this.formHook.renderAdd(frag, this.formInfo.length - 1);
+	      this.formInfo = frag;
+	      this.fragHook.renderAdd(frag[frag.length - 1], frag.length - 1);
+	      this.formHook.renderAdd(this.formInfo);
 	    }
 	  }, {
 	    key: 'changeFragHook',
@@ -1440,7 +1453,7 @@ var WaveGeneral =
 	      var ee = this.ee;
 	      this.fragController = new _FragController2.default(ee, this.fragDom, this.formInfo, this.samplesPerPixel, this.sampleRate);
 	      this.fragController.bindEvent();
-	      this.formController = new _FormController2.default(ee, this.formInfo);
+	      this.formController = new _FormController2.default(ee, this.formInfo, this.markInfo);
 	      this.formController.bindEvent();
 	      ee.on('play', function (startTime, endTime) {
 	        _this2.play(startTime, endTime);
@@ -1457,7 +1470,6 @@ var WaveGeneral =
 	        _this2.changeFragHook(frag, index);
 	      });
 	      ee.on('addFrag', function (frag) {
-	        _this2.formInfo.push(frag);
 	        _this2.setFragHook(frag);
 	      });
 	      ee.on('selectdFrag', function (index) {
@@ -1470,11 +1482,25 @@ var WaveGeneral =
 	        _this2.zoom(index);
 	      });
 	      ee.on('save', function (formData) {
-	        _this2.saveLocalStorage(formData);
+	        _this2.formInfo = formData;
+	        _this2.saveLocalStorage();
 	      });
-	      document.body.onmousewheel = function (e) {
+	      document.getElementById('wrap').onmousewheel = function (e) {
 	        var zoomIndex = e.deltaY === 100 ? 1 : -1;
+	        e.preventDefault();
 	        ee.emit('zoom', zoomIndex);
+	      };
+	      document.onkeyup = function (e) {
+	        switch (e.keyCode) {
+	          case 32:
+	            _this2.isPlaying() ? _this2.pause() : _this2.play();
+	            break;
+	          case 8:
+	            var index = document.getElementsByClassName('fragSelected')[0].getAttribute('name');
+	            _this2.deleteFragHook(index);
+	          default:
+	            break;
+	        }
 	      };
 	    }
 	    // 是否播放
@@ -1586,7 +1612,8 @@ var WaveGeneral =
 	    key: 'pause',
 	    value: function pause() {
 	      if (!this.isPlaying()) {
-	        return Promise.all(this.playoutPromises);
+	        return;
+	        // return Promise.all(this.playoutPromises);
 	      }
 	      this.stopAnimation();
 	      this.pauseTime = this.lastPlay;
@@ -1712,7 +1739,7 @@ var WaveGeneral =
 	    value: function renderFrag() {
 	      this.fragHook = new _FragHook2.default(this.fragDom, this.formInfo, this.samplesPerPixel, this.sampleRate, this.ee);
 	      this.fragHook.render();
-	      this.formHook = new _FormHook2.default(this.typeArr, this.formInfo, this.samplesPerPixel, this.sampleRate, this.ee);
+	      this.formHook = new _FormHook2.default(this.typeArr, this.formInfo, this.samplesPerPixel, this.sampleRate, this.ee, this.markInfo);
 	      this.formHook.render();
 	    }
 	    // 加载页面
@@ -4164,6 +4191,7 @@ var WaveGeneral =
 	    this.sampleRate = sampleRate;
 	    this.duration = duration;
 	
+	    this.oDiv0 = document.getElementById('container');
 	    this.oDiv1 = document.getElementById('waveBack');
 	    this.oDiv2 = document.getElementById('wavePointer');
 	    this.oDiv3 = document.getElementById('played');
@@ -4175,6 +4203,7 @@ var WaveGeneral =
 	      var widthX = (0, _conversions.secondsToPixels)(this.seconds, this.samplesPerPixel, this.sampleRate);
 	      var allWidth = (0, _conversions.secondsToPixels)(this.duration, this.samplesPerPixel, this.sampleRate);
 	      var playedWid = widthX / allWidth;
+	      this.oDiv0.scrollLeft = '' + (widthX - 400);
 	      this.oDiv1.style.width = widthX + 'px';
 	      this.oDiv2.style.left = widthX + 'px';
 	      this.oDiv3.style.width = playedWid * 100 + '%';
@@ -4270,10 +4299,13 @@ var WaveGeneral =
 	
 	var FromHook = function () {
 	  function FromHook(typeArr, formInfo, samplesPerPixel, sampleRate, ee) {
+	    var markInfo = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : {};
+	
 	    _classCallCheck(this, FromHook);
 	
 	    this.typeArr = typeArr;
 	    this.formInfo = formInfo;
+	    this.markInfo = markInfo;
 	    this.samplesPerPixel = samplesPerPixel;
 	    this.sampleRate = sampleRate;
 	    this.ee = ee;
@@ -4338,6 +4370,18 @@ var WaveGeneral =
 	      var qualityType = { type: 'radio', sort: 'qualityState', title: 'State', option: ['合格', '不合格'] };
 	      var qualityState = this.renderRadio(formItem, qualityType, 'qualityState' + index);
 	      var errorsState = this.renderCheckbox(formItem, errorInfo, 'errorsState' + index);
+	      if (this.markInfo.operationCase == 2 || this.markInfo.operationCase == 1) {
+	        var checkValue = formItem.extend.errorInfo || '';
+	        var errorValue = '';
+	        if (typeof checkValue === 'string') {
+	          checkValue = checkValue.split(',');
+	        }
+	        checkValue.forEach(function (item) {
+	          errorValue += (errorInfo.option[item] || '') + ',';
+	        });
+	        qualityState = '<div><p>\u72B6\u6001:</p><span>' + (qualityType.option[formItem.extend.qualityState] || '') + '</span></div>';
+	        errorsState = '<div><p>\u9519\u8BEF\u4FE1\u606F:</p><span>' + errorValue + '</span></div>';
+	      }
 	      var qualityDom = '<div class="quality-content">\n                          ' + qualityState + '\n                          ' + errorsState + '\n                        </div>';
 	      return qualityDom;
 	    }
@@ -4372,9 +4416,15 @@ var WaveGeneral =
 	    }
 	  }, {
 	    key: 'renderAdd',
-	    value: function renderAdd(form, index) {
-	      var formContent = this.creatDom(form, index);
-	      this.formDom.innerHTML += formContent;
+	    value: function renderAdd(form) {
+	      this.formInfo = form;
+	      this.render();
+	      // let formContent = '';
+	      // this.formInfo.forEach((formItem, index) => {
+	      //   formContent += this.creatDom(formItem, index);
+	      // });
+	      // formContent += this.creatDom(form, indexs);
+	      // this.formDom.innerHTML = formContent;
 	    }
 	  }, {
 	    key: 'render',
@@ -4483,6 +4533,21 @@ var WaveGeneral =
 	        _this.downPoint = null;
 	        _this.creatDom = false;
 	      });
+	      this.fragId.addEventListener('mouseleave', function (e) {
+	        if (e.which === 3) {
+	          return;
+	        }
+	        // if (this.selected) {
+	        //   this.upRightEvent();
+	        //   return;
+	        // }
+	        if (_this.creatDom) {
+	          _this.upEventCreat(e);
+	        }
+	        _this.shortFrag.style.display = 'none';
+	        _this.downPoint = null;
+	        _this.creatDom = false;
+	      });
 	    }
 	  }, {
 	    key: 'getAttrName',
@@ -4509,7 +4574,7 @@ var WaveGeneral =
 	    value: function getMouseLeft(e) {
 	      var canvasLeft = this.fragId.getBoundingClientRect().left;
 	      var mouseLeft = e.clientX;
-	      var playWidth = mouseLeft - canvasLeft;
+	      var playWidth = mouseLeft - parseInt(canvasLeft);
 	      return playWidth;
 	    }
 	  }, {
@@ -4517,7 +4582,7 @@ var WaveGeneral =
 	    value: function getHitPoint(e) {
 	      var canvasLeft = this.fragId.getBoundingClientRect().left;
 	      var selected = this.formInfo[this.selected];
-	      var mouseLeft = (0, _conversions.pixelsToSeconds)(e.clientX - canvasLeft, this.samplesPerPixel, this.sampleRate);
+	      var mouseLeft = (0, _conversions.pixelsToSeconds)(e.clientX - parseInt(canvasLeft), this.samplesPerPixel, this.sampleRate);
 	      var pointSlected = false;
 	      if (selected.end - 0.1 < mouseLeft && selected.end + 0.1 > mouseLeft) {
 	        pointSlected = 'end';
@@ -4542,7 +4607,7 @@ var WaveGeneral =
 	      var setUp = true;
 	      var points = (0, _conversions.pixelsToSeconds)(Point, this.samplesPerPixel, this.sampleRate);
 	      this.formInfo.forEach(function (item, index) {
-	        if (points > item.start && points < item.end && out != index) {
+	        if (points > item.start && points < item.end && parseInt(out) !== index) {
 	          setUp = false;
 	        }
 	      });
@@ -4606,7 +4671,8 @@ var WaveGeneral =
 	        title: '',
 	        extend: {}
 	      };
-	      this.ee.emit('addFrag', frag);
+	      this.formInfo.push(frag);
+	      this.ee.emit('addFrag', this.formInfo);
 	    }
 	  }, {
 	    key: 'rightEvent',
@@ -4637,6 +4703,9 @@ var WaveGeneral =
 	    key: 'moveRightEvent',
 	    value: function moveRightEvent(e) {
 	      var selectedDom = document.getElementsByClassName('fragSelected')[0];
+	      if (!selectedDom) {
+	        return;
+	      }
 	      var left = void 0;
 	      var width = void 0;
 	      if (this.movePoint) {
@@ -4693,10 +4762,11 @@ var WaveGeneral =
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 	
 	var FormController = function () {
-	  function FormController(ee, formInfo) {
+	  function FormController(ee, formInfo, markInfo) {
 	    _classCallCheck(this, FormController);
 	
 	    this.formInfo = formInfo;
+	    this.markInfo = markInfo;
 	    this.ee = ee;
 	    this.formDom = document.getElementById('formInfo');
 	    this.selected = 0;
@@ -4751,8 +4821,14 @@ var WaveGeneral =
 	  }, {
 	    key: 'setClassName',
 	    value: function setClassName(index) {
+	      var _this = this;
+	
 	      this.clearClassName();
-	      document.getElementsByClassName('form-group')[index].className = 'form-group form-selected';
+	      document.getElementById('wrap').getElementsByClassName('form-group')[index].className = 'form-group form-selected';
+	      this.formDom.getElementsByClassName('form-selected')[0].onmouseleave = function () {
+	        _this.addFormInfo();
+	        _this.ee.emit('save', _this.formInfo);
+	      };
 	    }
 	  }, {
 	    key: 'addFormInfo',
@@ -4780,22 +4856,38 @@ var WaveGeneral =
 	  }, {
 	    key: 'bindEvent',
 	    value: function bindEvent() {
-	      var _this = this;
+	      var _this2 = this;
 	
 	      this.formDom.addEventListener('click', function (e) {
-	        var name = e.target.getAttribute('name');
-	        var group = _this.getIndex(e.target);
+	        var name = e.target.getAttribute('name') || '';
+	        var group = _this2.getIndex(e.target);
 	        var index = group.getAttribute('name');
-	        _this.setClassName(index);
-	        if (name === 'close' && _this.selected === index) {
-	          _this.ee.emit('deleteFrag', index);
+	        _this2.setClassName(index);
+	        if (name === 'close' && _this2.selected === index) {
+	          _this2.ee.emit('deleteFrag', index);
 	        }
-	        _this.selected = index;
+	        if (name.indexOf('qualityState') >= 0) {
+	          var errorsState = document.getElementsByClassName('quality-content')[index].getElementsByClassName('form-content')[1];
+	          var fragDom = document.getElementsByClassName('frag');
+	          if (e.target.getAttribute('value') === '0') {
+	            errorsState.style.display = 'none';
+	            fragDom[index].className = 'frag fragGreen';
+	          } else if (e.target.getAttribute('value') === '1') {
+	            errorsState.style.display = 'block';
+	            fragDom[index].className = 'frag fragRed';
+	            for (var i = 0; i < errorsState.getElementsByTagName('input').length; i++) {
+	              errorsState.getElementsByTagName('input')[i].checked = false;
+	            }
+	          }
+	        }
+	        _this2.selected = index;
 	      });
-	      this.formDom.addEventListener('mouseleave', function () {
-	        _this.addFormInfo();
-	        _this.ee.emit('save', _this.formInfo);
-	      });
+	      // this.formDom.addEventListener('mouseleave', (e) => {
+	      //   console.log(e.target);
+	      //   // console.log(111)
+	      //   this.addFormInfo();
+	      //   this.ee.emit('save', this.formInfo);
+	      // });
 	    }
 	  }]);
 	
